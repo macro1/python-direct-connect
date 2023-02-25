@@ -3,7 +3,10 @@ import inspect
 import logging
 import ssl
 import weakref
-from typing import Iterable, Optional, Protocol, Union
+from typing import Iterable
+from typing import Optional
+from typing import Protocol
+from typing import Union
 
 from direct_connect.exceptions import TimeoutError
 from direct_connect.nmdc.protocol import NMDCClientProtocol

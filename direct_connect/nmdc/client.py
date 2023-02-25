@@ -1,5 +1,6 @@
 import asyncio
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 from direct_connect.nmdc.connection import Connection
 
@@ -20,7 +21,7 @@ class NMDC:
             socket_timeout=socket_timeout,
             socket_connect_timeout=socket_connect_timeout,
         )
-        self.hub_name = None
+        self.hub_name: Optional[str] = None
 
     async def connect(self) -> None:
         connect_task = asyncio.create_task(self.connection.connect())

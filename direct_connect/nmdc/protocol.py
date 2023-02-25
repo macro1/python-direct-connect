@@ -24,7 +24,7 @@ def key_from_lock(challenge: bytes) -> bytes:
 
 class NMDCClientProtocol(asyncio.Protocol):
     def __init__(
-        self, *, on_connected: asyncio.Future, on_hub_name: asyncio.Future
+        self, *, on_connected: asyncio.Future[bool], on_hub_name: asyncio.Future[bytes]
     ) -> None:
         self.on_connected = on_connected
         self.on_hub_name = on_hub_name
