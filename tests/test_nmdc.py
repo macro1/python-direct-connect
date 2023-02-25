@@ -9,6 +9,6 @@ from direct_connect import nmdc
 async def test_connect() -> None:
     print("doing test")
     client = nmdc.NMDC(host="nmdc", socket_timeout=2.0)
-    async with asyncio.timeout(30):
+    async with asyncio.timeout(30):  # type: ignore[attr-defined]
         await client.connect()
     assert client.hub_name == "<Enter hub name here>"
