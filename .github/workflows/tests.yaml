@@ -1,0 +1,17 @@
+on: push
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+        container:
+            image: python:3
+        services:
+            nmdc:
+                image: romancin/ptokax
+        steps:
+            - uses: actions/checkout@v3
+            - run: |
+                curl -sSL https://install.python-poetry.org | python -
+                /github/home/.local/bin/poetry config virtualenvs.create false --local
+                /github/home/.local/bin/poetry install
+                pytest
