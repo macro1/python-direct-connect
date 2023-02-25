@@ -1,0 +1,11 @@
+services:
+    test:
+        build:
+            dockerfile: ./tests/Dockerfile
+        depends_on:
+            - nmdc
+    nmdc:
+        build:
+            dockerfile: ./tests/services/Dockerfile.nmdc
+        ports:
+            - "4111:411"
