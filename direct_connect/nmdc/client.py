@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 from typing import Union
 
@@ -24,6 +23,5 @@ class NMDC:
         self.hub_name: Optional[str] = None
 
     async def connect(self) -> None:
-        connect_task = asyncio.create_task(self.connection.connect())
-        self.hub_name = await self.connection.get_hub_name()
-        await connect_task
+        await self.connection.connect()
+        self.hub_name = self.connection.hub_name
