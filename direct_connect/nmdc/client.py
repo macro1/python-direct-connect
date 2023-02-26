@@ -59,15 +59,12 @@ class NMDC:
                 )
             elif data[:9] == b"$HubName ":
                 self.hub_name = data[9:-1].decode()
+            elif data[:10] == b"$NickList ":
                 break
             else:
                 logger.warning(f"unrecognized: {data!r}")
         self._reader = reader
         self._writer = writer
-        motd = await self.receive_message()
-        logger.info(motd)
-        motd = await self.receive_message()
-        logger.info(motd)
 
     async def send_chat(self, message: str) -> None:
         self._writer.write(
