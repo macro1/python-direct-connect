@@ -4,6 +4,8 @@ services:
             dockerfile: ./tests/Dockerfile
         depends_on:
             - nmdc
+        volumes:
+            - .:/usr/src/app
     nmdc:
         build:
             dockerfile: ./tests/services/Dockerfile.nmdc
