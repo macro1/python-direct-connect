@@ -32,46 +32,60 @@ class NMDC:
         self.hub_name: Optional[str] = None
 
     async def connect(self) -> None:
-        async with asyncio.timeout(self.socket_connect_timeout):  # type: ignore[attr-defined]
-            reader, writer = await asyncio.open_connection(
-                host=self.host,
-                port=self.port,
-            )
-            while True:
-                data = await reader.readuntil(b"|")
-                logger.debug(f"connect: {data!r}")
-                if data[:6] == b"$Lock ":
-                    challenge = data.split(b" ")[1]
-                    key = key_from_lock(challenge)
-                    writer.write(b"$Supports HubTopic QuickList NoHello|$Key %b|" % key)
-                elif data[:10] == b"$Supports ":
-                    description = []
-                    if self.description_comment:
-                        description.append(self.description_comment)
-                    if self.description_tag is not None:
-                        description.append(f"<{self.description_tag}>")
-                    writer.write(
-                        f"$MyINFO $ALL {self.nick} {' '.join(description)}$ ${self.description_connection}1${self.description_email}$0$|".encode(
-                            self.encoding
-                        )
+        await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
+
+    async def _connect(self) -> None:
+        reader, writer = await asyncio.open_connection(
+            host=self.host,
+            port=self.port,
+        )
+        while True:
+            data = await reader.readuntil(b"|")
+            logger.debug(f"connect: {data!r}")
+            if data[:6] == b"$Lock ":
+                challenge = data.split(b" ")[1]
+                key = key_from_lock(challenge)
+                writer.write(b"$Key " + key + f"|$ValidateNick {self.nick}|".encode())
+            elif data[:7] == b"$Hello ":
+                description = []
+                if self.description_comment:
+                    description.append(self.description_comment)
+                if self.description_tag is not None:
+                    description.append(f"<{self.description_tag}>")
+                writer.write(
+                    f"$Version 1.0091|$MyINFO $ALL {self.nick} {' '.join(description)}$ ${self.description_connection}1${self.description_email}$0$|".encode(
+                        self.encoding
                     )
-                elif data[:9] == b"$HubName ":
-                    self.hub_name = data[9:-1].decode()
-                    break
-                else:
-                    logger.warning(f"unrecognized: {data!r}")
-            await writer.drain()
+                )
+            elif data[:9] == b"$HubName ":
+                self.hub_name = data[9:-1].decode()
+                break
+            else:
+                logger.warning(f"unrecognized: {data!r}")
         self._reader = reader
         self._writer = writer
+        motd = await self.receive_message()
+        logger.info(motd)
+        motd = await self.receive_message()
+        logger.info(motd)
 
-    async def send_message(self, message: str) -> None:
+    async def send_chat(self, message: str) -> None:
         self._writer.write(
-            f"<{self.nick}> {message.replace('|', '&#124;')}|".encode(self.encoding)
+            f"<{self.nick}> {message.replace('&', '&amp;').replace('|', '&#124;')}|".encode(
+                self.encoding
+            )
         )
+        await self._writer.drain()
 
     async def receive_message(self) -> str:
         message = await self._reader.readuntil(b"|")
-        return message[:-1].decode().replace("&#124;", "|")
+        return (
+            message[:-1]
+            .decode()
+            .replace("&#124;", "|")
+            .replace("&#36;", "$")
+            .replace("&amp;", "&")
+        )
 
 
 def key_from_lock(challenge: bytes) -> bytes:
