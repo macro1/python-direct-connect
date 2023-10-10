@@ -16,4 +16,4 @@ RUN poetry install --no-root
 COPY . .
 RUN pip install --editable . --no-deps
 
-CMD pytest
+CMD sh -c "coverage run -m pytest && coverage report"
