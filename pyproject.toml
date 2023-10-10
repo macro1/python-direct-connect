@@ -7,16 +7,16 @@ readme = "README.md"
 packages = [{include = "direct_connect"}]
 
 [tool.poetry.dependencies]
-python = "^3.7"
+python = "^3.8"
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.2.1"
-pytest-asyncio = "^0.20.3"
-mypy = "^1.0.1"
-black = "^23.1.0"
-isort = "^5.0"
-flake8 = "^5.0.4"
+pytest = "*"
+pytest-asyncio = "*"
+mypy = "*"
+black = "*"
+isort = "*"
+flake8 = "*"
 
 [build-system]
 requires = ["poetry-core"]
