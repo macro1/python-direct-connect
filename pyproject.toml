@@ -11,16 +11,25 @@ python = "^3.8"
 
 
 [tool.poetry.group.dev.dependencies]
+black = "*"
+coverage = { version = "*", extras = ["toml"] }
+flake8 = "*"
+isort = "*"
+mypy = "*"
 pytest = "*"
 pytest-asyncio = "*"
-mypy = "*"
-black = "*"
-isort = "*"
-flake8 = "*"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.coverage.run]
+branch = true
+source = ["direct_connect"]
+
+[tool.coverage.report]
+fail_under = 85
+show_missing = true
 
 [tool.isort]
 force_single_line = true
