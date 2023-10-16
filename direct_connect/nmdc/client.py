@@ -1,9 +1,15 @@
 import asyncio
 import logging
 from typing import Optional
+from typing import TypedDict
 from typing import Union
 
 logger = logging.getLogger(__name__)
+
+
+class NMDCMessage(TypedDict):
+    user: str | None
+    message: str
 
 
 class NMDC:
@@ -14,6 +20,7 @@ class NMDC:
     description_connection = ""
     description_email = ""
     encoding = "utf_8"
+    _get_message_task = None
 
     def __init__(
         self,
@@ -74,15 +81,45 @@ class NMDC:
         )
         await self._writer.drain()
 
-    async def receive_message(self) -> str:
-        message = await self._reader.readuntil(b"|")
-        return (
-            message[:-1]
+    async def get_message(self, blocking: bool = False) -> NMDCMessage | None:
+        get_message_task = self._get_message_task
+        if blocking:
+            raw_message = await (get_message_task or self._reader.readuntil(b"|"))
+            self._get_message_task = None
+        else:
+            if self._get_message_task is None:
+                self._get_message_task = asyncio.create_task(
+                    self._reader.readuntil(b"|")
+                )
+            try:
+                raw_message = await asyncio.wait_for(
+                    asyncio.shield(self._get_message_task), 0
+                )
+            except TimeoutError:
+                return None
+            else:
+                self._get_message_task = None
+        decoded_message = (
+            raw_message[:-1]
             .decode()
             .replace("&#124;", "|")
             .replace("&#36;", "$")
             .replace("&amp;", "&")
         )
+        if decoded_message[0] == "<":
+            user_name, message = decoded_message[1:].split("> ", 1)
+        else:
+            user_name = None
+            message = decoded_message
+        return {"user": user_name, "message": message}
+
+    def close(self) -> None:
+        if self._get_message_task is not None:
+            self._get_message_task.cancel()
+        self._writer.close()
+
+    async def wait_closed(self) -> None:
+        await self._writer.wait_closed()
 
 
 def key_from_lock(challenge: bytes) -> bytes:
