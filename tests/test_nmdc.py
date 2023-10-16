@@ -17,9 +17,14 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
     await client.connect()
     await client.send_chat(test_chat)
     for i in range(10):
-        msg = await asyncio.wait_for(client.receive_message(), 10.0)
-        print(msg)
-        if msg == f"<{test_nick}> {test_chat}":
+        msg = await client.get_message()
+        if msg is not None and msg == {"user": test_nick, "message": test_chat}:
             break
+        await asyncio.sleep(0.1)
+    else:
+        raise Exception("expected message not found")
+
+    client.close()
+    await client.wait_closed()
 
     assert client.hub_name == "<Enter hub name here>"
