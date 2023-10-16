@@ -74,11 +74,10 @@ class NMDC:
         self._writer = writer
 
     async def send_chat(self, message: str) -> None:
-        self._writer.write(
-            f"<{self.nick}> {message.replace('&', '&amp;').replace('|', '&#124;')}|".encode(
-                self.encoding
-            )
-        )
+        escaped_message = message.replace("&", "&amp;").replace("|", "&#124;")
+        prepared_message = f"<{self.nick}> {escaped_message}"
+        logger.debug(f"Sending message: {prepared_message}")
+        self._writer.write(f"{prepared_message}|".encode(self.encoding))
         await self._writer.drain()
 
     async def get_message(self, blocking: bool = False) -> NMDCMessage | None:
@@ -106,6 +105,7 @@ class NMDC:
             .replace("&#36;", "$")
             .replace("&amp;", "&")
         )
+        logger.debug(f"Received message: {decoded_message}")
         if decoded_message[0] == "<":
             user_name, message = decoded_message[1:].split("> ", 1)
         else:
