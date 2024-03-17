@@ -30,13 +30,15 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
 
 
 @pytest.mark.asyncio
-async def test_connect_with_no_description_comment(caplog: pytest.LogCaptureFixture) -> None:
+async def test_connect_with_no_description_comment(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
     test_nick = "mcbotter☺&️2"
     test_chat = "testing?|&$ &#36; ☺️ heh"
 
     caplog.set_level(logging.DEBUG)
     client = nmdc.NMDC(host="nmdc", nick=test_nick, socket_timeout=2.0)
-    client.description_comment = ''
+    client.description_comment = ""
 
     await client.connect()
     await client.send_chat(test_chat)
@@ -51,6 +53,7 @@ async def test_connect_with_no_description_comment(caplog: pytest.LogCaptureFixt
     await client.wait_closed()
 
     assert client.hub_name == "<Enter hub name here>"
+
 
 @pytest.mark.asyncio
 async def test_connect_with_description_tag(caplog: pytest.LogCaptureFixture) -> None:
@@ -59,7 +62,7 @@ async def test_connect_with_description_tag(caplog: pytest.LogCaptureFixture) ->
 
     caplog.set_level(logging.DEBUG)
     client = nmdc.NMDC(host="nmdc", nick=test_nick, socket_timeout=2.0)
-    client.description_tag = 'awesome client v2'
+    client.description_tag = "awesome client v2"
 
     await client.connect()
     await client.send_chat(test_chat)
@@ -74,3 +77,8 @@ async def test_connect_with_description_tag(caplog: pytest.LogCaptureFixture) ->
     await client.wait_closed()
 
     assert client.hub_name == "<Enter hub name here>"
+
+
+def test_key_from_lock() -> None:
+    # some characters interfere with the DC protocol and must be escaped
+    assert nmdc.client.key_from_lock(bytes([3])) == b"/%DCN096%/"
