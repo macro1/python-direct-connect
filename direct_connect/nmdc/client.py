@@ -82,7 +82,7 @@ class NMDC:
         raw_message = await self._reader.readuntil(b"|")
         decoded_message = (
             raw_message[:-1]
-            .decode()
+            .decode(self.encoding)
             .replace("&#124;", "|")
             .replace("&#36;", "$")
             .replace("&amp;", "&")
