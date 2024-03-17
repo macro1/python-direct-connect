@@ -1,6 +1,5 @@
 import asyncio
 import logging
-from typing import Optional
 from typing import TypedDict
 from typing import Union
 
@@ -16,7 +15,7 @@ class NMDC:
     _reader: asyncio.StreamReader
     _writer: asyncio.StreamWriter
     description_comment = "bot"
-    description_tag: Optional[str] = None
+    description_tag: str | None = None
     description_connection = ""
     description_email = ""
     encoding = "utf_8"
@@ -27,8 +26,8 @@ class NMDC:
         host: str = "localhost",
         nick: str = "bot",
         port: Union[str, int] = 411,
-        socket_timeout: Optional[float] = None,
-        socket_connect_timeout: Optional[float] = None,
+        socket_timeout: float | None = None,
+        socket_connect_timeout: float | None = None,
     ):
         self.host = host
         self.port = port
@@ -36,7 +35,7 @@ class NMDC:
         self.nick = nick
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
-        self.hub_name: Optional[str] = None
+        self.hub_name: str | None = None
 
     async def connect(self) -> None:
         await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
