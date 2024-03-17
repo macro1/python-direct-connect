@@ -19,7 +19,7 @@ class NMDC:
     description_connection = ""
     description_email = ""
     encoding = "utf_8"
-    _get_message_task = None
+    _get_message_task: asyncio.Task[bytes] | None = None
 
     def __init__(
         self,
