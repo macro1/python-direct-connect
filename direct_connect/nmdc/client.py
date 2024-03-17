@@ -19,7 +19,6 @@ class NMDC:
     description_connection = ""
     description_email = ""
     encoding = "utf_8"
-    _get_message_task: asyncio.Task[bytes] | None = None
 
     def __init__(
         self,
@@ -79,24 +78,8 @@ class NMDC:
         self._writer.write(f"{prepared_message}|".encode(self.encoding))
         await self._writer.drain()
 
-    async def get_message(self, blocking: bool = True) -> NMDCMessage | None:
-        get_message_task = self._get_message_task
-        if blocking:
-            raw_message = await (get_message_task or self._reader.readuntil(b"|"))
-            self._get_message_task = None
-        else:
-            if self._get_message_task is None:
-                self._get_message_task = asyncio.create_task(
-                    self._reader.readuntil(b"|")
-                )
-            try:
-                raw_message = await asyncio.wait_for(
-                    asyncio.shield(self._get_message_task), 0
-                )
-            except TimeoutError:
-                return None
-            else:
-                self._get_message_task = None
+    async def get_message(self) -> NMDCMessage | None:
+        raw_message = await self._reader.readuntil(b"|")
         decoded_message = (
             raw_message[:-1]
             .decode()
@@ -113,8 +96,6 @@ class NMDC:
         return {"user": user_name, "message": message}
 
     def close(self) -> None:
-        if self._get_message_task is not None:
-            self._get_message_task.cancel()
         self._writer.close()
 
     async def wait_closed(self) -> None:
