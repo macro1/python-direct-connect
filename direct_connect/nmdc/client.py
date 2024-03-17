@@ -63,7 +63,7 @@ class NMDC:
                     )
                 )
             elif data[:9] == b"$HubName ":
-                self.hub_name = data[9:-1].decode()
+                self.hub_name = data[9:-1].decode(self.encoding)
             elif data[:10] == b"$NickList ":
                 break
             else:
