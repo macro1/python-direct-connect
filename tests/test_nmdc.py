@@ -21,7 +21,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
         if msg == {"user": test_nick, "message": test_chat}:
             break
     else:
-        raise Exception("expected message not found")
+        pytest.fail("the expected messages were not found")
 
     client.close()
     await client.wait_closed()
