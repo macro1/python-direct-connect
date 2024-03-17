@@ -1,6 +1,6 @@
 FROM python:3
 
-ENV POETRY_VERSION 1.6.1
+ENV POETRY_VERSION 1.8.2
 ENV VIRTUAL_ENV /usr/venv
 ENV PATH $VIRTUAL_ENV/bin:/root/.local/bin:$PATH
 
