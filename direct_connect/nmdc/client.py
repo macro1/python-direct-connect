@@ -80,7 +80,7 @@ class NMDC:
         self._writer.write(f"{prepared_message}|".encode(self.encoding))
         await self._writer.drain()
 
-    async def get_message(self, blocking: bool = False) -> NMDCMessage | None:
+    async def get_message(self, blocking: bool = True) -> NMDCMessage | None:
         get_message_task = self._get_message_task
         if blocking:
             raw_message = await (get_message_task or self._reader.readuntil(b"|"))

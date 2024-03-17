@@ -17,10 +17,7 @@ async def test_connect(caplog: pytest.LogCaptureFixture) -> None:
     await client.connect()
     await client.send_chat(test_chat)
     for i in range(10):
-        msg = await client.get_message()
-        if msg is None:
-            await asyncio.sleep(0.1)
-            continue
+        msg = await asyncio.wait_for(client.get_message(), 1)
         if msg == {"user": test_nick, "message": test_chat}:
             break
     else:
