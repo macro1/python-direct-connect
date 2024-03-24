@@ -1,14 +1,24 @@
 import asyncio
-import logging
 from typing import TypedDict
 from typing import Union
+import dataclasses
+from direct_connect.nmdc import handlers
+from direct_connect.nmdc import logger
 
-logger = logging.getLogger(__name__)
-
-
-class NMDCMessage(TypedDict):
-    user: str | None
+@dataclasses.dataclass(slots=True)
+class NMDCEvent:
+    event_type: str
     message: str
+    user: str | None = None
+
+def nmdc_decode(encoded_message: bytes, encoding: str) -> str:
+    return (
+        encoded_message
+        .decode(encoding)
+        .replace("&#124;", "|")
+        .replace("&#36;", "$")
+        .replace("&amp;", "&")
+    )
 
 
 class NMDC:
@@ -19,6 +29,10 @@ class NMDC:
     description_connection = ""
     description_email = ""
     encoding = "utf_8"
+    _read_task: asyncio.Task | None = None
+    handlers = {
+        '$Lock': handlers.connect
+    }
 
     def __init__(
         self,
@@ -29,7 +43,7 @@ class NMDC:
         socket_connect_timeout: float | None = None,
     ):
         self.host = host
-        self.port = port
+        self.port = int(port)
         assert " " not in nick, "NMDC nicks cannot contain spaces"
         self.nick = nick
         self.socket_timeout = socket_timeout
@@ -38,83 +52,55 @@ class NMDC:
 
     async def connect(self) -> None:
         await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
+        #self._read_task = asyncio.create_task(self.read_forever)
 
     async def _connect(self) -> None:
         reader, writer = await asyncio.open_connection(
             host=self.host,
             port=self.port,
         )
-        while True:
-            data = await reader.readuntil(b"|")
-            logger.debug(f"connect: {data!r}")
-            if data[:6] == b"$Lock ":
-                challenge = data.split(b" ")[1]
-                key = key_from_lock(challenge)
-                writer.write(b"$Key " + key + f"|$ValidateNick {self.nick}|".encode())
-            elif data[:7] == b"$Hello ":
-                description = []
-                if self.description_comment:
-                    description.append(self.description_comment)
-                if self.description_tag is not None:
-                    description.append(f"<{self.description_tag}>")
-                writer.write(
-                    f"$Version 1.0091|$MyINFO $ALL {self.nick} {' '.join(description)}$ ${self.description_connection}1${self.description_email}$0$|".encode(
-                        self.encoding
-                    )
-                )
-            elif data[:9] == b"$HubName ":
-                self.hub_name = data[9:-1].decode(self.encoding)
-            elif data[:10] == b"$NickList ":
-                break
-            else:
-                logger.warning(f"unrecognized: {data!r}")
+        writer.transport.set_write_buffer_limits(0)
         self._reader = reader
         self._writer = writer
 
-    async def send_chat(self, message: str) -> None:
-        escaped_message = message.replace("&", "&amp;").replace("|", "&#124;")
-        prepared_message = f"<{self.nick}> {escaped_message}"
-        logger.debug(f"Sending message: {prepared_message}")
-        self._writer.write(f"{prepared_message}|".encode(self.encoding))
-        await self._writer.drain()
-
-    async def get_message(self) -> NMDCMessage | None:
-        raw_message = await self._reader.readuntil(b"|")
-        decoded_message = (
-            raw_message[:-1]
-            .decode(self.encoding)
-            .replace("&#124;", "|")
-            .replace("&#36;", "$")
-            .replace("&amp;", "&")
-        )
-        logger.debug(f"Received message: {decoded_message}")
-        if decoded_message[0] == "<":
-            user_name, message = decoded_message[1:].split("> ", 1)
-        else:
-            user_name = None
-            message = decoded_message
-        return {"user": user_name, "message": message}
-
     def close(self) -> None:
+        if self._get_message_task is not None:
+            self._get_message_task.cancel()
         self._writer.close()
 
     async def wait_closed(self) -> None:
         await self._writer.wait_closed()
 
+    async def read_forever(self) -> None:
+        while True:
+            await asyncio.sleep(1.0)
+            await self._writer.drain()
+            try:
+                raw_event = await asyncio.wait_for(self._reader.readuntil(b'|'), 0.1)
+            except TimeoutError:
+                continue
+            except asyncio.IncompleteReadError as e:
+                print(e.partial)
+                raise
+            print("<- server", raw_event)
+            user: str | None = None
+            event: NMDCEvent
+            type_bytes, message_bytes = raw_event.split(b' ', maxsplit=1)
 
-def key_from_lock(challenge: bytes) -> bytes:
-    key = []
-    key.append(
-        challenge[0] ^ challenge[len(challenge) - 1] ^ challenge[len(challenge) - 2] ^ 5
-    )
-    for i in range(1, len(challenge)):
-        key.append(challenge[i] ^ challenge[i - 1])
-    for i in range(0, len(challenge)):
-        key[i] = ((key[i] << 4) & 240) | ((key[i] >> 4) & 15)
-    response = b""
-    for i in range(0, len(key)):
-        if key[i] in (0, 5, 36, 96, 124, 126):
-            response += b"/%%DCN%03d%%/" % (key[i],)
-        else:
-            response += bytes([key[i]])
-    return response
+            event_type = nmdc_decode(type_bytes, self.encoding)
+            if event_type[0] == "<":
+                event_type = "message"
+                user = nmdc_decode(event_type[1:-1], self.encoding)
+            try:
+                handler = self.handlers[event_type]
+            except KeyError:
+                logger.debug(f"Unhandled {event_type} event", extra={'raw_event': raw_event})
+                continue
+            message = nmdc_decode(message_bytes, self.encoding)
+            event = NMDCEvent(event_type, message, user)
+            asyncio.create_task(handler(self, event))
+
+    async def write(self, message: str) -> None:
+        encoded_message = message.encode(self.encoding) + b"|"
+        print("-> server", encoded_message)
+        self._writer.write(encoded_message)
