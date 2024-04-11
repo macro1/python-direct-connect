@@ -1,6 +1,8 @@
 import asyncio
 import dataclasses
+from typing import Any
 from typing import Callable
+from typing import Coroutine
 from typing import Union
 
 from direct_connect.nmdc import handlers
@@ -12,6 +14,9 @@ class NMDCEvent:
     event_type: str
     message: str
     user: str | None = None
+
+
+EventHandler = Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]
 
 
 def nmdc_decode(encoded_message: bytes, encoding: str) -> str:
@@ -31,8 +36,8 @@ class NMDC:
     description_connection = ""
     description_email = ""
     encoding = "utf_8"
-    _read_task: asyncio.Task | None = None
-    handlers: dict[str, Callable[["NMDC", NMDCEvent], None]]
+    _read_task: asyncio.Task[bytes] | None = None
+    handlers: dict[str, list[Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]]]
 
     def __init__(
         self,
@@ -73,27 +78,24 @@ class NMDC:
         await self._writer.wait_closed()
 
     async def read_forever(self) -> None:
-        tasks = set()
+        tasks: set[asyncio.Task[Any]] = set()
         while True:
-            if not tasks:
-                await asyncio.sleep(0.1)
-            else:
-                done, tasks = await asyncio.wait(
-                    tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED
-                )
-                for task in done:
-                    await task
+            if self._read_task is None:
+                self._read_task = asyncio.create_task(self._reader.readuntil(b"|"))
+            done, tasks = await asyncio.wait(
+                tasks | {self._read_task},
+                timeout=1.0,
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            done.discard(self._read_task)
+            for task in done:
+                await task
             await self._writer.drain()
-            try:
-                raw_event = await asyncio.wait_for(self._reader.readuntil(b"|"), 0.1)
-            except TimeoutError:
+            if not self._read_task.done():
                 continue
-            except asyncio.IncompleteReadError as e:
-                print(e.partial)
-                self.close()
-                await self.wait_closed()
-                raise
-            print("<- server", raw_event)
+            raw_event = await self._read_task
+            self._read_task = None
+            print(f"{self.nick} <- server", raw_event)
             user: str | None = None
             event: NMDCEvent
             type_bytes, message_bytes = raw_event.split(b" ", maxsplit=1)
@@ -103,7 +105,7 @@ class NMDC:
                 user = event_type[1:-1]
                 event_type = "message"
             try:
-                handlers = self.handlers[event_type]
+                event_handlers = self.handlers[event_type]
             except KeyError:
                 logger.debug(
                     f"Unhandled {event_type} event", extra={"raw_event": raw_event}
@@ -111,12 +113,12 @@ class NMDC:
                 continue
             message = nmdc_decode(message_bytes[:-1], self.encoding)
             event = NMDCEvent(event_type, message, user)
-            for handler in handlers:
+            for handler in event_handlers:
                 tasks.add(asyncio.create_task(handler(self, event)))
 
     async def write(self, message: str) -> None:
         encoded_message = message.encode(self.encoding) + b"|"
-        print("-> server", encoded_message)
+        print(f"{self.nick} -> server", encoded_message)
         self._writer.write(encoded_message)
         await self._writer.drain()
 
@@ -125,8 +127,8 @@ class NMDC:
         prepared_message = f"<{self.nick}> {escaped_message}"
         await self.write(prepared_message)
 
-    def on(self, event_type):
-        def decorator(fn):
+    def on(self, event_type: str) -> Callable[[EventHandler], EventHandler]:
+        def decorator(fn: EventHandler) -> EventHandler:
             try:
                 handlers = self.handlers[event_type]
             except KeyError:

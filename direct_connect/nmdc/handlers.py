@@ -1,15 +1,21 @@
+from typing import TYPE_CHECKING
+
 from direct_connect.nmdc import logger
 
-
-async def default(client, event, *args):
-    logger.warning("Unhandled event", extra={"event": event, "args": args})
-
-
-async def store_hubname(client, event, *args):
-    client.hub_name = " ".join(args)
+if TYPE_CHECKING:
+    from direct_connect.nmdc.client import NMDC
+    from direct_connect.nmdc.client import NMDCEvent
 
 
-async def connect(client, event):
+async def default(client: "NMDC", event: "NMDCEvent") -> None:
+    logger.warning("Unhandled event", extra={"event": event})
+
+
+async def store_hubname(client: "NMDC", event: "NMDCEvent") -> None:
+    client.hub_name = event.message
+
+
+async def connect(client: "NMDC", event: "NMDCEvent") -> None:
     await client.write("$Supports QuickList NoGetINFO")
     description = []
     if client.description_comment:
