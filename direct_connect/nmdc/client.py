@@ -69,10 +69,11 @@ class NMDC:
         self._reader = reader
         self._writer = writer
 
-    def close(self) -> None:
-        # if self._get_message_task is not None:
-        #     self._get_message_task.cancel()
+    def close(self) -> Coroutine[Any, Any, None]:
+        if self._read_task:
+            self._read_task.cancel()
         self._writer.close()
+        return self.wait_closed()
 
     async def wait_closed(self) -> None:
         await self._writer.wait_closed()

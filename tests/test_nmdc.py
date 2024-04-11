@@ -14,35 +14,35 @@ async def test_connect(nmdc_host_and_port, caplog: pytest.LogCaptureFixture) -> 
 
     host, port = nmdc_host_and_port
     caplog.set_level(logging.DEBUG)
-    client = nmdc.NMDC(host=host, port=port, nick="readschat", socket_timeout=2.0)
-    client2 = nmdc.NMDC(host=host, port=port, nick=test_nick, socket_timeout=2.0)
+    reading_client = nmdc.NMDC(
+        host=host, port=port, nick="readschat", socket_timeout=2.0
+    )
+    sending_client = nmdc.NMDC(host=host, port=port, nick=test_nick, socket_timeout=2.0)
 
     class Success(Exception):
         pass
 
-    @client.on("message")
+    @reading_client.on("message")
     async def check_message(client, event: NMDCEvent):
         print("wut", event.user, event.message)
         if event.user == test_nick and event.message == test_chat:
             raise Success
 
-    @client2.on("$OpList")
+    @sending_client.on("$OpList")
     async def send_message(client, event):
-        await client2.send_chat(test_chat)
+        await sending_client.send_chat(test_chat)
 
-    client_connect = asyncio.create_task(client.connect())
-    await asyncio.create_task(client2.connect())
+    client_connect = asyncio.create_task(reading_client.connect())
+    await asyncio.create_task(sending_client.connect())
     await client_connect
-    reading_chat = asyncio.create_task(client.read_forever())
-    sending_chat = asyncio.create_task(client2.read_forever())
+    reading_chat = asyncio.create_task(reading_client.read_forever())
+    sending_chat = asyncio.create_task(sending_client.read_forever())
     with pytest.raises(Success):
         await asyncio.wait_for(reading_chat, 10)
     sending_chat.cancel()
 
-    client.close()
-    await client.wait_closed()
-    client2.close()
-    await client2.wait_closed()
+    await reading_client.close()
+    await sending_client.close()
 
 
 #
