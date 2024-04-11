@@ -6,7 +6,6 @@ from typing import Coroutine
 from typing import Union
 
 from direct_connect.nmdc import handlers
-from direct_connect.nmdc import logger
 
 
 @dataclasses.dataclass(slots=True)
@@ -54,11 +53,13 @@ class NMDC:
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
         self.hub_name: str | None = None
-        self.handlers = {"$Lock": [handlers.connect]}
+        self.handlers = {}
+        # default handlers
+        self.on("$Lock")(handlers.connect)
+        self.on("$HubName")(handlers.store_hubname)
 
     async def connect(self) -> None:
         await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
-        # self._read_task = asyncio.create_task(self.read_forever)
 
     async def _connect(self) -> None:
         reader, writer = await asyncio.open_connection(
@@ -108,10 +109,7 @@ class NMDC:
             try:
                 event_handlers = self.handlers[event_type]
             except KeyError:
-                logger.debug(
-                    f"Unhandled {event_type} event", extra={"raw_event": raw_event}
-                )
-                continue
+                event_handlers = [handlers.default]
             message = nmdc_decode(message_bytes[:-1], self.encoding)
             event = NMDCEvent(event_type, message, user)
             for handler in event_handlers:
