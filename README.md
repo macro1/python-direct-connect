@@ -2,7 +2,9 @@
 
 Run tests
 ```commandline
-docker compose run test
+poetry install
+poetry run coverage run -m pytest
+poetry run coverage report
 ```
 
 Linting is black/isort/mypy/flake8 and those can be run locally as appropriate.

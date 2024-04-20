@@ -13,4 +13,6 @@ jobs:
           poetry run mypy
           poetry run black . --check
           poetry run flake8
-      - run: docker compose run test
+      - run: |
+          poetry run coverage run -m pytest
+          poetry run coverage report
