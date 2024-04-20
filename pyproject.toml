@@ -8,7 +8,7 @@ packages = [{include = "direct_connect"}]
 license = "ISC"
 
 [tool.poetry.dependencies]
-python = "^3.8"
+python = "^3.9"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -19,6 +19,8 @@ isort = "*"
 mypy = "*"
 pytest = "*"
 pytest-asyncio = "*"
+tenacity = "*"
+testcontainers = "^4.0.0"
 
 [build-system]
 requires = ["poetry-core"]
@@ -31,6 +33,9 @@ source = ["direct_connect"]
 [tool.coverage.report]
 fail_under = 100
 show_missing = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+]
 
 [tool.isort]
 force_single_line = true
@@ -40,3 +45,9 @@ profile = "black"
 explicit_package_bases = true
 files = ["."]
 strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    'testcontainers.*',
+]
+ignore_missing_imports = true
