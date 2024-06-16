@@ -1,8 +1,8 @@
 import asyncio
 import dataclasses
+from collections.abc import Callable
+from collections.abc import Coroutine
 from typing import Any
-from typing import Callable
-from typing import Coroutine
 from typing import Union
 
 from direct_connect.nmdc import handlers
@@ -36,7 +36,7 @@ class NMDC:
     description_email = ""
     encoding = "utf_8"
     _read_task: asyncio.Task[bytes] | None = None
-    handlers: dict[str, list[Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]]]
+    handlers: dict[str, list[EventHandler]]
 
     def __init__(
         self,
