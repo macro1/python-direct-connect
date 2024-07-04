@@ -37,8 +37,8 @@ async def test_connect(
     client_connect = asyncio.create_task(reading_client.connect())
     await asyncio.create_task(sending_client.connect())
     await client_connect
-    reading_chat = asyncio.create_task(reading_client.read_forever())
-    sending_chat = asyncio.create_task(sending_client.read_forever())
+    reading_chat = asyncio.create_task(reading_client.run_forever())
+    sending_chat = asyncio.create_task(sending_client.run_forever())
     with pytest.raises(Success):
         await asyncio.wait_for(reading_chat, 10)
     sending_chat.cancel()

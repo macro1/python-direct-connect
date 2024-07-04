@@ -6,6 +6,7 @@ from typing import Any
 from typing import Union
 
 from direct_connect.nmdc import handlers
+from direct_connect.nmdc import logger
 
 
 @dataclasses.dataclass(slots=True)
@@ -34,9 +35,9 @@ class NMDC:
     description_tag: str | None = None
     description_connection = ""
     description_email = ""
-    encoding = "utf_8"
-    _read_task: asyncio.Task[bytes] | None = None
     handlers: dict[str, list[EventHandler]]
+    reconnect_delay: float = 5
+    ping_interval: float = 20
 
     def __init__(
         self,
@@ -45,6 +46,7 @@ class NMDC:
         port: Union[str, int] = 411,
         socket_timeout: float | None = None,
         socket_connect_timeout: float | None = None,
+        encoding="utf_8",
     ):
         self.host = host
         self.port = int(port)
@@ -54,6 +56,7 @@ class NMDC:
         self.socket_connect_timeout = socket_connect_timeout
         self.hub_name: str | None = None
         self.handlers = {}
+        self.encoding = encoding
         # default handlers
         self.on("$Lock")(handlers.connect)
         self.on("$HubName")(handlers.store_hubname)
@@ -71,53 +74,81 @@ class NMDC:
         self._writer = writer
 
     def close(self) -> Coroutine[Any, Any, None]:
-        if self._read_task:
-            self._read_task.cancel()
         self._writer.close()
         return self.wait_closed()
 
     async def wait_closed(self) -> None:
         await self._writer.wait_closed()
 
-    async def read_forever(self) -> None:
-        tasks: set[asyncio.Task[Any]] = set()
+    async def listen(self) -> None:
+        read_task = asyncio.create_task(self._reader.readuntil(b"|"))
+        tasks = {read_task}
         while True:
-            if self._read_task is None:
-                self._read_task = asyncio.create_task(self._reader.readuntil(b"|"))
+            await self._writer.drain()
+
             done, tasks = await asyncio.wait(
-                tasks | {self._read_task},
-                timeout=1.0,
-                return_when=asyncio.FIRST_COMPLETED,
+                tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED
             )
-            done.discard(self._read_task)
+
+            for task in done:
+                if task is read_task:
+                    raw_event = await task
+                    read_task = asyncio.create_task(self._reader.readuntil(b"|"))
+                    read_task.add_done_callback(tasks.discard)
+                    tasks.add(read_task)
+
+                    user: str | None = None
+                    event: NMDCEvent
+                    type_bytes, message_bytes = raw_event.split(b" ", maxsplit=1)
+
+                    event_type = nmdc_decode(type_bytes, self.encoding)
+                    if event_type[0] == "<":
+                        user = event_type[1:-1]
+                        event_type = "message"
+                    try:
+                        event_handlers = self.handlers[event_type]
+                    except KeyError:
+                        event_handlers = [handlers.default]
+                    message = nmdc_decode(message_bytes[:-1], self.encoding)
+                    event = NMDCEvent(event_type, message, user)
+                    for handler in event_handlers:
+                        handler_task = asyncio.create_task(handler(self, event))
+                        handler_task.add_done_callback(tasks.discard)
+                        tasks.add(handler_task)
+                else:
+                    await task
+
+    async def ping(self):
+        while True:
+            await asyncio.sleep(self.ping_interval)
+            await self.write("")
+            await self._writer.drain()
+
+    async def run_forever(self):
+        try:
+            await self.connect()
+            done, pending = await asyncio.wait(
+                {asyncio.create_task(c) for c in (self.ping(), self.listen())},
+                return_when=asyncio.FIRST_EXCEPTION,
+            )
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
             for task in done:
                 await task
-            await self._writer.drain()
-            if not self._read_task.done():
-                continue
-            raw_event = await self._read_task
-            self._read_task = None
-            print(f"{self.nick} <- server", raw_event)
-            user: str | None = None
-            event: NMDCEvent
-            type_bytes, message_bytes = raw_event.split(b" ", maxsplit=1)
 
-            event_type = nmdc_decode(type_bytes, self.encoding)
-            if event_type[0] == "<":
-                user = event_type[1:-1]
-                event_type = "message"
-            try:
-                event_handlers = self.handlers[event_type]
-            except KeyError:
-                event_handlers = [handlers.default]
-            message = nmdc_decode(message_bytes[:-1], self.encoding)
-            event = NMDCEvent(event_type, message, user)
-            for handler in event_handlers:
-                tasks.add(asyncio.create_task(handler(self, event)))
+        except tuple():  # todo: specific errors
+            await asyncio.sleep(self.reconnect_delay)
 
     async def write(self, message: str) -> None:
         encoded_message = message.encode(self.encoding) + b"|"
-        print(f"{self.nick} -> server", encoded_message)
+        logger.info(
+            "Sending message to NMDC server",
+            extra={"nmdc_nick": self.nick, "nmdc_message": encoded_message},
+        )
         self._writer.write(encoded_message)
         await self._writer.drain()
 
