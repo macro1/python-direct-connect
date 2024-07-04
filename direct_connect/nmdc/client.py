@@ -63,6 +63,7 @@ class NMDC:
 
     async def connect(self) -> None:
         await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
+        logger.info("Connected")
 
     async def _connect(self) -> None:
         reader, writer = await asyncio.open_connection(
@@ -105,10 +106,7 @@ class NMDC:
                     if event_type[0] == "<":
                         user = event_type[1:-1]
                         event_type = "message"
-                    try:
-                        event_handlers = self.handlers[event_type]
-                    except KeyError:
-                        event_handlers = [handlers.default]
+                    event_handlers = self.handlers.get(event_type, [handlers.default])
                     message = nmdc_decode(message_bytes[:-1], self.encoding)
                     event = NMDCEvent(event_type, message, user)
                     for handler in event_handlers:
@@ -125,23 +123,25 @@ class NMDC:
             await self._writer.drain()
 
     async def run_forever(self):
-        try:
-            await self.connect()
-            done, pending = await asyncio.wait(
-                {asyncio.create_task(c) for c in (self.ping(), self.listen())},
-                return_when=asyncio.FIRST_EXCEPTION,
-            )
-            for task in pending:
-                task.cancel()
-                try:
+        while True:
+            try:
+                await self.connect()
+                done, pending = await asyncio.wait(
+                    {asyncio.create_task(c) for c in (self.ping(), self.listen())},
+                    return_when=asyncio.FIRST_EXCEPTION,
+                )
+                for task in pending:
+                    task.cancel()
+                    try:
+                        await task
+                    except asyncio.CancelledError:
+                        pass
+                for task in done:
                     await task
-                except asyncio.CancelledError:
-                    pass
-            for task in done:
-                await task
 
-        except tuple():  # todo: specific errors
-            await asyncio.sleep(self.reconnect_delay)
+            except (OSError, asyncio.IncompleteReadError) as e:
+                logger.exception(f"Retrying after {self.reconnect_delay}s")
+                await asyncio.sleep(self.reconnect_delay)
 
     async def write(self, message: str) -> None:
         encoded_message = message.encode(self.encoding) + b"|"
