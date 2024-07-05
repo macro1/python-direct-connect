@@ -134,10 +134,14 @@ class NMDC:
                         await task
                     except asyncio.CancelledError:
                         pass
-                for task in done:
+                for (
+                    task
+                ) in (
+                    done
+                ):  # pragma: no branch # done will always have at least one task
                     await task
 
-            except (OSError, asyncio.IncompleteReadError):
+            except (OSError, asyncio.IncompleteReadError):  # pragma: no cover
                 logger.exception(f"Retrying after {self.reconnect_delay}s")
                 await asyncio.sleep(self.reconnect_delay)
                 await self.connect()

@@ -21,6 +21,7 @@ async def test_connect(
     sending_client = nmdc.NMDC(host=host, port=port, nick=test_nick, socket_timeout=2.0)
     sending_client.description_comment = ""
     sending_client.description_tag = "123"
+    sending_client.ping_interval = 0.1
 
     class Success(Exception):
         pass
