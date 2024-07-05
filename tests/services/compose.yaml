@@ -3,7 +3,7 @@ services:
     build:
       dockerfile: Dockerfile.nmdc
     ports:
-      - "411"
+      - "4111:411"
   nmdc_disconnect:
     build:
       dockerfile: Dockerfile.nmdc

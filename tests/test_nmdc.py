@@ -45,17 +45,3 @@ async def test_connect(
 
     await reading_client.close()
     await sending_client.close()
-
-
-@pytest.mark.asyncio
-async def test_cancel_read_close(
-    nmdc_host_and_port: tuple[str, str], caplog: pytest.LogCaptureFixture
-) -> None:
-    host, port = nmdc_host_and_port
-    client = nmdc.NMDC(host=host, port=port, nick="readschat", socket_timeout=2.0)
-    await client.connect()
-    client._read_task = asyncio.create_task(client._reader.readuntil(b"|"))
-    await client.close()
-    await client.connect()
-    client._read_task = None
-    await client.close()

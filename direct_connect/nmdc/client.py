@@ -46,8 +46,8 @@ class NMDC:
         port: Union[str, int] = 411,
         socket_timeout: float | None = None,
         socket_connect_timeout: float | None = None,
-        encoding="utf_8",
-    ):
+        encoding: str = "utf_8",
+    ) -> None:
         self.host = host
         self.port = int(port)
         assert " " not in nick, "NMDC nicks cannot contain spaces"
@@ -83,7 +83,7 @@ class NMDC:
 
     async def listen(self) -> None:
         read_task = asyncio.create_task(self._reader.readuntil(b"|"))
-        tasks = {read_task}
+        tasks: set[asyncio.Task[Any]] = {read_task}
         while True:
             await self._writer.drain()
 
@@ -92,10 +92,10 @@ class NMDC:
             )
 
             for task in done:
+                tasks.discard(task)
                 if task is read_task:
-                    raw_event = await task
+                    raw_event = await read_task
                     read_task = asyncio.create_task(self._reader.readuntil(b"|"))
-                    read_task.add_done_callback(tasks.discard)
                     tasks.add(read_task)
 
                     user: str | None = None
@@ -111,21 +111,19 @@ class NMDC:
                     event = NMDCEvent(event_type, message, user)
                     for handler in event_handlers:
                         handler_task = asyncio.create_task(handler(self, event))
-                        handler_task.add_done_callback(tasks.discard)
                         tasks.add(handler_task)
                 else:
                     await task
 
-    async def ping(self):
+    async def ping(self) -> None:
         while True:
             await asyncio.sleep(self.ping_interval)
             await self.write("")
             await self._writer.drain()
 
-    async def run_forever(self):
+    async def run_forever(self) -> None:
         while True:
             try:
-                await self.connect()
                 done, pending = await asyncio.wait(
                     {asyncio.create_task(c) for c in (self.ping(), self.listen())},
                     return_when=asyncio.FIRST_EXCEPTION,
@@ -139,9 +137,10 @@ class NMDC:
                 for task in done:
                     await task
 
-            except (OSError, asyncio.IncompleteReadError) as e:
+            except (OSError, asyncio.IncompleteReadError):
                 logger.exception(f"Retrying after {self.reconnect_delay}s")
                 await asyncio.sleep(self.reconnect_delay)
+                await self.connect()
 
     async def write(self, message: str) -> None:
         encoded_message = message.encode(self.encoding) + b"|"
