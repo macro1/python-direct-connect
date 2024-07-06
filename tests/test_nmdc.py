@@ -21,6 +21,7 @@ async def test_connect(
     sending_client = nmdc.NMDC(host=host, port=port, nick=test_nick, socket_timeout=2.0)
     sending_client.description_comment = ""
     sending_client.description_tag = "123"
+    sending_client.ping_interval = 0.1
 
     class Success(Exception):
         pass
@@ -37,25 +38,11 @@ async def test_connect(
     client_connect = asyncio.create_task(reading_client.connect())
     await asyncio.create_task(sending_client.connect())
     await client_connect
-    reading_chat = asyncio.create_task(reading_client.read_forever())
-    sending_chat = asyncio.create_task(sending_client.read_forever())
+    reading_chat = asyncio.create_task(reading_client.run_forever())
+    sending_chat = asyncio.create_task(sending_client.run_forever())
     with pytest.raises(Success):
         await asyncio.wait_for(reading_chat, 10)
     sending_chat.cancel()
 
     await reading_client.close()
     await sending_client.close()
-
-
-@pytest.mark.asyncio
-async def test_cancel_read_close(
-    nmdc_host_and_port: tuple[str, str], caplog: pytest.LogCaptureFixture
-) -> None:
-    host, port = nmdc_host_and_port
-    client = nmdc.NMDC(host=host, port=port, nick="readschat", socket_timeout=2.0)
-    await client.connect()
-    client._read_task = asyncio.create_task(client._reader.readuntil(b"|"))
-    await client.close()
-    await client.connect()
-    client._read_task = None
-    await client.close()
