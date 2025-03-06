@@ -3,17 +3,18 @@ import dataclasses
 from collections.abc import Callable
 from collections.abc import Coroutine
 from typing import Any
+from typing import Optional
 from typing import Union
 
 from direct_connect.nmdc import handlers
 from direct_connect.nmdc import logger
 
 
-@dataclasses.dataclass(slots=True)
+@dataclasses.dataclass
 class NMDCEvent:
     event_type: str
     message: str
-    user: str | None = None
+    user: Optional[str] = None
 
 
 EventHandler = Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]
@@ -32,7 +33,7 @@ class NMDC:
     _reader: asyncio.StreamReader
     _writer: asyncio.StreamWriter
     description_comment = "bot"
-    description_tag: str | None = None
+    description_tag: Optional[str] = None
     description_connection = ""
     description_email = ""
     handlers: dict[str, list[EventHandler]]
@@ -44,8 +45,8 @@ class NMDC:
         host: str = "localhost",
         nick: str = "",
         port: Union[str, int] = 411,
-        socket_timeout: float | None = None,
-        socket_connect_timeout: float | None = None,
+        socket_timeout: Optional[float] = None,
+        socket_connect_timeout: Optional[float] = None,
         encoding: str = "utf_8",
     ) -> None:
         self.host = host
@@ -54,7 +55,7 @@ class NMDC:
         self.nick = nick
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
-        self.hub_name: str | None = None
+        self.hub_name: Optional[str] = None
         self.handlers = {}
         self.encoding = encoding
         # default handlers
@@ -98,7 +99,7 @@ class NMDC:
                     read_task = asyncio.create_task(self._reader.readuntil(b"|"))
                     tasks.add(read_task)
 
-                    user: str | None = None
+                    user: Optional[str] = None
                     event: NMDCEvent
                     type_bytes, message_bytes = raw_event.split(b" ", maxsplit=1)
 
