@@ -144,9 +144,15 @@ class NMDC:
                     await task
 
             except (OSError, asyncio.IncompleteReadError):  # pragma: no cover
-                logger.exception(f"Retrying after {self.reconnect_delay}s")
-                await asyncio.sleep(self.reconnect_delay)
-                await self.connect()
+                while True:
+                    logger.error(f"Retrying after {self.reconnect_delay}s")
+                    await asyncio.sleep(self.reconnect_delay)
+                    try:
+                        await self.connect()
+                    except OSError:
+                        pass
+                    else:
+                        break
 
     async def write(self, message: str) -> None:
         encoded_message = message.encode(self.encoding) + b"|"
