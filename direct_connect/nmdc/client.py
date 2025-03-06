@@ -123,6 +123,7 @@ class NMDC:
             await self._writer.drain()
 
     async def run_forever(self) -> None:
+        await self.connect()
         while True:
             try:
                 done, pending = await asyncio.wait(
