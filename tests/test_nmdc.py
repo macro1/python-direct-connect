@@ -23,13 +23,13 @@ async def test_connect(
     sending_client.description_tag = "123"
     sending_client.ping_interval = 0.1
 
-    class Success(Exception):
+    class SuccessError(Exception):
         pass
 
     @reading_client.on("message")
     async def check_message(client: nmdc.NMDC, event: nmdc.NMDCEvent) -> None:
         if event.user == test_nick and event.message == test_chat:
-            raise Success
+            raise SuccessError
 
     @sending_client.on("$OpList")
     async def send_message(client: nmdc.NMDC, event: nmdc.NMDCEvent) -> None:
@@ -37,7 +37,7 @@ async def test_connect(
 
     reading_chat = asyncio.create_task(reading_client.run_forever())
     sending_chat = asyncio.create_task(sending_client.run_forever())
-    with pytest.raises(Success):
+    with pytest.raises(SuccessError):
         await asyncio.wait_for(reading_chat, 10)
     sending_chat.cancel()
 

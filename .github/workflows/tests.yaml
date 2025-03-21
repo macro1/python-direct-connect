@@ -20,10 +20,9 @@ jobs:
           curl -sSL https://install.python-poetry.org | python -
           echo "${HOME}/.local/bin" >> $GITHUB_PATH
           poetry install
-          poetry run isort . --check-only
+          poetry run ruff format . --check
+          poetry run ruff check .
           poetry run mypy
-          poetry run black . --check
-          poetry run flake8
       - run: |
           poetry run coverage run -m pytest
           poetry run coverage report

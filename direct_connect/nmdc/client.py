@@ -136,9 +136,7 @@ class NMDC:
                         await task
                     except asyncio.CancelledError:
                         pass
-                for (
-                    task
-                ) in (
+                for task in (
                     done
                 ):  # pragma: no branch # done will always have at least one task
                     await task
