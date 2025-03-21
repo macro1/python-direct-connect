@@ -12,13 +12,11 @@ python = "^3.9"
 
 
 [tool.poetry.group.dev.dependencies]
-black = "*"
 coverage = { version = "*", extras = ["toml"] }
-flake8 = "*"
-isort = "*"
 mypy = "*"
 pytest = "*"
 pytest-asyncio = "*"
+ruff = "*"
 tenacity = "*"
 testcontainers = "^4.0.0"
 
@@ -37,10 +35,6 @@ exclude_also = [
     "if TYPE_CHECKING:",
 ]
 
-[tool.isort]
-force_single_line = true
-profile = "black"
-
 [tool.mypy]
 explicit_package_bases = true
 files = ["."]
@@ -51,3 +45,21 @@ module = [
     'testcontainers.*',
 ]
 ignore_missing_imports = true
+
+[tool.ruff.lint]
+select = [
+    "B", # flake8-bugbear
+    "I", # isort
+    "C90", # mccabe
+    "N", # pep8-naming
+    "E", # pycodestyle error
+    "W", # pycodestyle warning
+    "F", # Pyflakes
+    "PLW", # Pylint warning
+]
+ignore = [
+    "E501", # Line too long
+]
+
+[tool.ruff.lint.isort]
+force-single-line = true

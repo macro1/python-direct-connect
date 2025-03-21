@@ -7,7 +7,7 @@ poetry run coverage run -m pytest
 poetry run coverage report
 ```
 
-Linting is black/isort/mypy/flake8 and those can be run locally as appropriate.
+Linting is ruff and can be run locally as appropriate.
 
 
 ## Usage
