@@ -13,16 +13,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v4
         with:
           python-version: ${{ matrix.python-version }}
       - run: |
-          curl -sSL https://install.python-poetry.org | python -
-          echo "${HOME}/.local/bin" >> $GITHUB_PATH
-          poetry install
-          poetry run ruff format . --check
-          poetry run ruff check .
-          poetry run mypy
+          uv sync
+          uv run ruff format . --check
+          uv run ruff check .
+          uv run mypy
       - run: |
-          poetry run coverage run -m pytest
-          poetry run coverage report
+          uv run coverage run -m pytest
+          uv run coverage report
