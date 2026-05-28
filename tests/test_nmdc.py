@@ -4,11 +4,30 @@ import logging
 import pytest
 
 from direct_connect import nmdc
+from direct_connect.nmdc.client import nmdc_escape
+from direct_connect.nmdc.client import nmdc_unescape
 
 
 def test_nick_with_space_raises() -> None:
     with pytest.raises(ValueError, match="cannot contain spaces"):
         nmdc.NMDC(nick="bad nick")
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "plain text",
+        "pipe | here",
+        "dollar $ here",
+        "ampersand & here",
+        "all three: | $ &",
+        "literal escape sequence &#124; should round-trip",
+        "literal &amp; should not double-decode",
+        "",
+    ],
+)
+def test_escape_unescape_round_trip(raw: str) -> None:
+    assert nmdc_unescape(nmdc_escape(raw)) == raw
 
 
 @pytest.mark.asyncio
