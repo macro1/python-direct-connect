@@ -120,7 +120,6 @@ class NMDC:
         while True:
             await asyncio.sleep(self.ping_interval)
             await self.write("")
-            await self._writer.drain()
 
     async def run_forever(self) -> None:
         await self.connect()
