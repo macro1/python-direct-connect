@@ -23,7 +23,6 @@ EventHandler = Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]
 # Encode only applies the framing-required escapes; chat doesn't use $ as a
 # delimiter so permissive hubs (PtokaX) round-trip a literal $ fine. Decode
 # still handles $ for hubs that do send it escaped.
-# TODO: optional strict_escape mode that also escapes $ for stricter hubs.
 _FRAMING_ESCAPES = (("&", "&amp;"), ("|", "&#124;"))
 _ALL_ESCAPES = _FRAMING_ESCAPES + (("$", "&#36;"),)
 
