@@ -2,9 +2,9 @@
 
 Run tests
 ```commandline
-poetry install
-poetry run coverage run -m pytest
-poetry run coverage report
+uv sync
+uv run coverage run -m pytest
+uv run coverage report
 ```
 
 Linting is ruff and can be run locally as appropriate.
