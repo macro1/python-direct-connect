@@ -6,6 +6,11 @@ import pytest
 from direct_connect import nmdc
 
 
+def test_nick_with_space_raises() -> None:
+    with pytest.raises(ValueError, match="cannot contain spaces"):
+        nmdc.NMDC(nick="bad nick")
+
+
 @pytest.mark.asyncio
 async def test_connect(
     nmdc_host_and_port: tuple[str, str], caplog: pytest.LogCaptureFixture

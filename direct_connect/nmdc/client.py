@@ -51,7 +51,8 @@ class NMDC:
     ) -> None:
         self.host = host
         self.port = int(port)
-        assert " " not in nick, "NMDC nicks cannot contain spaces"
+        if " " in nick:
+            raise ValueError("NMDC nicks cannot contain spaces")
         self.nick = nick
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
