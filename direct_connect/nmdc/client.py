@@ -87,14 +87,13 @@ class NMDC:
         read_task = asyncio.create_task(self._reader.readuntil(b"|"))
         tasks: set[asyncio.Task[Any]] = {read_task}
         while True:
+            # Drain before reading so outgoing writes win priority over the
+            # next inbound event when the loop is busy.
             await self._writer.drain()
 
-            done, tasks = await asyncio.wait(
-                tasks, timeout=0.1, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
             for task in done:
-                tasks.discard(task)
                 if task is read_task:
                     raw_event = await read_task
                     read_task = asyncio.create_task(self._reader.readuntil(b"|"))
