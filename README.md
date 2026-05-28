@@ -12,29 +12,33 @@ Linting is ruff and can be run locally as appropriate.
 
 ## Usage
 
-Import and create a client.
+Create a client.
 ```python
 from direct_connect import nmdc
 
 client = nmdc.NMDC(host="example.com", nick="my_bot", socket_timeout=2.0)
 ```
 
-Send a message.
+Register a handler for incoming chat messages. Handlers are coroutines
+that receive the client and an `NMDCEvent` (with `event_type`, `message`,
+and `user` attributes).
 ```python
-await msg = await client.send_chat("test chat")
+@client.on("message")
+async def on_message(client: nmdc.NMDC, event: nmdc.NMDCEvent) -> None:
+    print(f"{event.user}: {event.message}")
 ```
 
-Get a message.
-```python
-await msg = await client.get_message()
-```
-Note this is 'blocking' in the sense that messages are not being
-retrieved if `get_message()` is not being awaited. It may make sense to
-build a worker pattern in your application with a task continually
-checking for messages.
+You can register handlers for any NMDC command (e.g. `$HubName`,
+`$OpList`) by passing the command name. Multiple handlers per event
+type are supported.
 
-Messages are returned as dictionaries with `user` and `message` keys.
+Send a chat message.
+```python
+await client.send_chat("test chat")
 ```
->>> msg
-{"user": "my_bot", "message": "test chat"}
+
+Run the client. `run_forever()` connects, sends pings, listens for
+events, and reconnects on connection errors.
+```python
+await client.run_forever()
 ```
