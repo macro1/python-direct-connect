@@ -20,13 +20,27 @@ class NMDCEvent:
 EventHandler = Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]
 
 
+# Encode only applies the framing-required escapes; chat doesn't use $ as a
+# delimiter so permissive hubs (PtokaX) round-trip a literal $ fine. Decode
+# still handles $ for hubs that do send it escaped.
+_FRAMING_ESCAPES = (("&", "&amp;"), ("|", "&#124;"))
+_ALL_ESCAPES = _FRAMING_ESCAPES + (("$", "&#36;"),)
+
+
+def nmdc_escape(message: str) -> str:
+    for raw, esc in _FRAMING_ESCAPES:
+        message = message.replace(raw, esc)
+    return message
+
+
+def nmdc_unescape(message: str) -> str:
+    for raw, esc in reversed(_ALL_ESCAPES):
+        message = message.replace(esc, raw)
+    return message
+
+
 def nmdc_decode(encoded_message: bytes, encoding: str) -> str:
-    return (
-        encoded_message.decode(encoding)
-        .replace("&#124;", "|")
-        .replace("&#36;", "$")
-        .replace("&amp;", "&")
-    )
+    return nmdc_unescape(encoded_message.decode(encoding))
 
 
 class NMDC:
@@ -157,9 +171,7 @@ class NMDC:
         await self._writer.drain()
 
     async def send_chat(self, message: str) -> None:
-        escaped_message = message.replace("&", "&amp;").replace("|", "&#124;")
-        prepared_message = f"<{self.nick}> {escaped_message}"
-        await self.write(prepared_message)
+        await self.write(f"<{self.nick}> {nmdc_escape(message)}")
 
     def on(self, event_type: str) -> Callable[[EventHandler], EventHandler]:
         def decorator(fn: EventHandler) -> EventHandler:
