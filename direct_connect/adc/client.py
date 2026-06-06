@@ -101,6 +101,7 @@ class ADC:
     handlers: dict[str, list[EventHandler]]
     reconnect_delay: float = 5
     ping_interval: float = 30
+    description_tag: Optional[str] = None
 
     def __init__(
         self,
@@ -124,6 +125,7 @@ class ADC:
         self.pid, self.cid = generate_pid_and_cid()
         self.features: set[str] = {"BASE", "TIGR"}
         self.hub_features: set[str] = set()
+        self.client_info: dict[str, Union[str, int]] = {}
 
         # default handlers
         self.on("ISUP")(handlers.handle_sup)

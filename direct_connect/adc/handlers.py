@@ -34,17 +34,15 @@ async def handle_inf(client: "ADC", event: "ADCEvent") -> None:
     if client.sid is None:
         raise ValueError("Cannot send INF before receiving SID from hub")
     su_value = ",".join(sorted(client.features))
-    await client.write(
-        "B",
-        "INF",
+    args = [
         client.sid,
         f"ID{client.cid}",
         f"PD{client.pid}",
         f"NI{client.nick}",
         f"SU{su_value}",
-        "VEpy-direct-connect-0.1.2",
-        "US1048576",
-        "SL5",
-        "SS1073741824",
-        "CT1",
-    )
+    ]
+    if client.description_tag is not None:
+        args.append(f"VE{client.description_tag}")
+    for key, value in sorted(client.client_info.items()):
+        args.append(f"{key}{value}")
+    await client.write("B", "INF", *args)
