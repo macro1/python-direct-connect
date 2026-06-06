@@ -122,6 +122,8 @@ class ADC:
         self.encoding = encoding
         self.sid: Optional[str] = None
         self.pid, self.cid = generate_pid_and_cid()
+        self.features: set[str] = {"BASE", "TIGR"}
+        self.hub_features: set[str] = set()
 
         # default handlers
         self.on("ISUP")(handlers.handle_sup)
@@ -131,8 +133,9 @@ class ADC:
     async def connect(self) -> None:
         await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
         logger.info(f"Connected to ADC hub at {self.host}:{self.port}")
-        # Start state machine by sending HSUP first!
-        await self.write("H", "SUP", "ADBASE", "ADTIGR")
+        # Start state machine by dynamically advertising our capabilities!
+        sup_args = [f"AD{f}" for f in sorted(self.features)]
+        await self.write("H", "SUP", *sup_args)
 
     async def _connect(self) -> None:
         reader, writer = await asyncio.open_connection(
