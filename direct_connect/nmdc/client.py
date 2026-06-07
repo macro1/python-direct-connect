@@ -6,6 +6,8 @@ from typing import Any
 from typing import Optional
 from typing import Union
 
+from direct_connect.exceptions import MessageLimitExceededError
+from direct_connect.io import StreamConnection
 from direct_connect.nmdc import handlers
 from direct_connect.nmdc import logger
 
@@ -22,7 +24,7 @@ EventHandler = Callable[["NMDC", NMDCEvent], Coroutine[Any, Any, None]]
 
 def nmdc_decode(encoded_message: bytes, encoding: str) -> str:
     return (
-        encoded_message.decode(encoding)
+        encoded_message.decode(encoding, errors="replace")
         .replace("&#124;", "|")
         .replace("&#36;", "$")
         .replace("&amp;", "&")
@@ -30,8 +32,7 @@ def nmdc_decode(encoded_message: bytes, encoding: str) -> str:
 
 
 class NMDC:
-    _reader: asyncio.StreamReader
-    _writer: asyncio.StreamWriter
+    _conn: StreamConnection
     description_comment = "bot"
     description_tag: Optional[str] = None
     description_connection = ""
@@ -39,6 +40,27 @@ class NMDC:
     handlers: dict[str, list[EventHandler]]
     reconnect_delay: float = 5
     ping_interval: float = 20
+    max_message_size: int = 65536
+
+    @property
+    def _reader(self) -> asyncio.StreamReader:
+        if self._conn._reader is None:
+            raise RuntimeError("Not connected")
+        return self._conn._reader
+
+    @_reader.setter
+    def _reader(self, value: asyncio.StreamReader) -> None:
+        self._conn._reader = value
+
+    @property
+    def _writer(self) -> asyncio.StreamWriter:
+        if self._conn._writer is None:
+            raise RuntimeError("Not connected")
+        return self._conn._writer
+
+    @_writer.setter
+    def _writer(self, value: asyncio.StreamWriter) -> None:
+        self._conn._writer = value
 
     def __init__(
         self,
@@ -56,6 +78,12 @@ class NMDC:
         self.nick = nick
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
+        self._conn = StreamConnection(
+            host=self.host,
+            port=self.port,
+            socket_timeout=self.socket_timeout,
+            socket_connect_timeout=self.socket_connect_timeout,
+        )
         self.hub_name: Optional[str] = None
         self.handlers = {}
         self.encoding = encoding
@@ -64,39 +92,34 @@ class NMDC:
         self.on("$HubName")(handlers.store_hubname)
 
     async def connect(self) -> None:
-        await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
+        await self._conn.connect()
         logger.info("Connected")
 
-    async def _connect(self) -> None:
-        reader, writer = await asyncio.open_connection(
-            host=self.host,
-            port=self.port,
-        )
-        writer.transport.set_write_buffer_limits(0)
-        self._reader = reader
-        self._writer = writer
-
     def close(self) -> Coroutine[Any, Any, None]:
-        self._writer.close()
+        self._conn.close()
         return self.wait_closed()
 
     async def wait_closed(self) -> None:
-        await self._writer.wait_closed()
+        await self._conn.wait_closed()
 
     async def listen(self) -> None:
-        read_task = asyncio.create_task(self._reader.readuntil(b"|"))
+        read_task = asyncio.create_task(
+            self._conn.read_until(b"|", self.max_message_size)
+        )
         tasks: set[asyncio.Task[Any]] = {read_task}
         while True:
             # Drain before reading so outgoing writes win priority over the
             # next inbound event when the loop is busy.
-            await self._writer.drain()
+            await self._conn.drain()
 
             done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
             for task in done:
                 if task is read_task:
                     raw_event = await read_task
-                    read_task = asyncio.create_task(self._reader.readuntil(b"|"))
+                    read_task = asyncio.create_task(
+                        self._conn.read_until(b"|", self.max_message_size)
+                    )
                     tasks.add(read_task)
 
                     user: Optional[str] = None
@@ -140,7 +163,12 @@ class NMDC:
                 ):  # pragma: no branch # done will always have at least one task
                     await task
 
-            except (OSError, asyncio.IncompleteReadError):  # pragma: no cover
+            except (
+                OSError,
+                asyncio.IncompleteReadError,
+                TimeoutError,
+                MessageLimitExceededError,
+            ):
                 logger.exception(f"Retrying after {self.reconnect_delay}s")
                 await asyncio.sleep(self.reconnect_delay)
                 await self.connect()
@@ -151,8 +179,8 @@ class NMDC:
             "Sending message to NMDC server",
             extra={"nmdc_nick": self.nick, "nmdc_message": encoded_message},
         )
-        self._writer.write(encoded_message)
-        await self._writer.drain()
+        self._conn.write(encoded_message)
+        await self._conn.drain()
 
     async def send_chat(self, message: str) -> None:
         escaped_message = message.replace("&", "&amp;").replace("|", "&#124;")
