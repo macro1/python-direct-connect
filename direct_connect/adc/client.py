@@ -11,6 +11,8 @@ from typing import Union
 
 from direct_connect.adc import handlers
 from direct_connect.adc import logger
+from direct_connect.exceptions import MessageLimitExceededError
+from direct_connect.io import StreamConnection
 from direct_connect.vendored.tiger import tiger
 
 
@@ -96,12 +98,32 @@ def generate_pid_and_cid() -> tuple[str, str]:
 
 
 class ADC:
-    _reader: asyncio.StreamReader
-    _writer: asyncio.StreamWriter
+    _conn: StreamConnection
     handlers: dict[str, list[EventHandler]]
     reconnect_delay: float = 5
     ping_interval: float = 30
     description_tag: Optional[str] = None
+    max_message_size: int = 65536
+
+    @property
+    def _reader(self) -> asyncio.StreamReader:
+        if self._conn._reader is None:
+            raise RuntimeError("Not connected")
+        return self._conn._reader
+
+    @_reader.setter
+    def _reader(self, value: asyncio.StreamReader) -> None:
+        self._conn._reader = value
+
+    @property
+    def _writer(self) -> asyncio.StreamWriter:
+        if self._conn._writer is None:
+            raise RuntimeError("Not connected")
+        return self._conn._writer
+
+    @_writer.setter
+    def _writer(self, value: asyncio.StreamWriter) -> None:
+        self._conn._writer = value
 
     def __init__(
         self,
@@ -119,6 +141,12 @@ class ADC:
         self.nick = nick
         self.socket_timeout = socket_timeout
         self.socket_connect_timeout = socket_connect_timeout
+        self._conn = StreamConnection(
+            host=self.host,
+            port=self.port,
+            socket_timeout=self.socket_timeout,
+            socket_connect_timeout=self.socket_connect_timeout,
+        )
         self.handlers = {}
         self.encoding = encoding
         self.sid: Optional[str] = None
@@ -133,43 +161,38 @@ class ADC:
         self.on("IINF")(handlers.handle_inf)
 
     async def connect(self) -> None:
-        await asyncio.wait_for(self._connect(), self.socket_connect_timeout)
+        await self._conn.connect()
         logger.info(f"Connected to ADC hub at {self.host}:{self.port}")
         # Start state machine by dynamically advertising our capabilities!
         sup_args = [f"AD{f}" for f in sorted(self.features)]
         await self.write("H", "SUP", *sup_args)
 
-    async def _connect(self) -> None:
-        reader, writer = await asyncio.open_connection(
-            host=self.host,
-            port=self.port,
-        )
-        writer.transport.set_write_buffer_limits(0)
-        self._reader = reader
-        self._writer = writer
-
     def close(self) -> Coroutine[Any, Any, None]:
-        self._writer.close()
+        self._conn.close()
         return self.wait_closed()
 
     async def wait_closed(self) -> None:
-        await self._writer.wait_closed()
+        await self._conn.wait_closed()
 
     async def listen(self) -> None:
-        read_task = asyncio.create_task(self._reader.readuntil(b"\n"))
+        read_task = asyncio.create_task(
+            self._conn.read_until(b"\n", self.max_message_size)
+        )
         tasks: set[asyncio.Task[Any]] = {read_task}
         while True:
-            await self._writer.drain()
+            await self._conn.drain()
 
             done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
 
             for task in done:
                 if task is read_task:
                     raw_event = await read_task
-                    read_task = asyncio.create_task(self._reader.readuntil(b"\n"))
+                    read_task = asyncio.create_task(
+                        self._conn.read_until(b"\n", self.max_message_size)
+                    )
                     tasks.add(read_task)
 
-                    decoded = raw_event.decode(self.encoding)
+                    decoded = raw_event.decode(self.encoding, errors="replace")
                     logger.info(f"[{self.nick}] Received: {decoded.strip()}")
                     event = parse_adc_line(decoded)
                     if event is None:
@@ -208,7 +231,12 @@ class ADC:
                 for task in done:
                     await task
 
-            except (OSError, asyncio.IncompleteReadError):  # pragma: no cover
+            except (
+                OSError,
+                asyncio.IncompleteReadError,
+                TimeoutError,
+                MessageLimitExceededError,
+            ):
                 logger.exception(
                     f"[{self.nick}] Retrying after {self.reconnect_delay}s"
                 )
@@ -224,8 +252,8 @@ class ADC:
 
         encoded_message = message.encode(self.encoding)
         logger.info(f"[{self.nick}] Sending: {message.strip()}")
-        self._writer.write(encoded_message)
-        await self._writer.drain()
+        self._conn.write(encoded_message)
+        await self._conn.drain()
 
     async def send_chat(self, message: str) -> None:
         if self.sid is None:
