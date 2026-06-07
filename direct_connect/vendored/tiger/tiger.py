@@ -129,9 +129,6 @@ def hash(str: bytes) -> bytes:
         j += 1
 
     if j > 56:
-        while j < 64:
-            temp.append(0)
-            j += 1
         tiger_compress(bytes(temp), res)
         j = 0
         temp = bytearray()
