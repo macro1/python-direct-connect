@@ -9,4 +9,8 @@ services:
       dockerfile: Dockerfile.nmdc
     ports:
       - "411"
-
+  adc:
+    build:
+      dockerfile: Dockerfile.adc
+    ports:
+      - "1511:1511"

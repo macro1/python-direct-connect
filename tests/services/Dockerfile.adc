@@ -1,0 +1,29 @@
+FROM alpine:latest AS builder
+RUN apk update && apk add --no-cache bash cmake make gcc g++ git sqlite-dev openssl-dev build-base
+
+WORKDIR /opt
+RUN git clone --depth 1 https://github.com/janvidar/uhub.git
+
+WORKDIR /opt/uhub
+RUN cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 . && make
+RUN mkdir -p /conf && \
+    cp doc/plugins.conf doc/uhub.conf doc/users.conf doc/rules.txt /conf/ && \
+    sed -i 's/\/usr\/lib\/uhub\//\/libs\//g' /conf/*.conf && \
+    sed -i 's/\/usr\/lib\/uhub\//\/libs\//g' /conf/rules.txt && \
+    sed -i 's/\/etc\/uhub\//\/conf\//g' /conf/*.conf && \
+    sed -i 's/\/etc\/uhub\//\/conf\//g' /conf/rules.txt && \
+    sed -i 's/server_bind_addr=any/server_bind_addr=0.0.0.0/g' /conf/uhub.conf && \
+    echo 'Welcome to uHub' > /conf/motd.txt
+
+# Create a lightweight run image
+FROM alpine:latest
+RUN apk update && apk add --no-cache bash openssl sqlite-dev
+WORKDIR /app
+COPY --from=builder /opt/uhub/uhub .
+COPY --from=builder /conf/ /conf/
+COPY --from=builder /opt/uhub/*.so /libs/
+
+EXPOSE 1511
+
+ENTRYPOINT ["./uhub"]
+CMD ["-c", "/conf/uhub.conf"]
