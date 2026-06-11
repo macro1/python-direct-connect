@@ -1,113 +1,161 @@
-# Direct Connect Client Library for Python
+# direct-connect
 
-An asynchronous, lightweight Direct Connect client library for Python supporting both the Neo-Modus Direct Connect (NMDC) and Advanced Direct Connect (ADC) protocols.
+An async Python client library for the [Direct Connect](https://en.wikipedia.org/wiki/Direct_Connect_(protocol)) file-sharing network, supporting both the NMDC and ADC protocols.
 
-## Installation & Development
-
-### Run tests
-To run the project test suite and generate a coverage report:
-```commandline
-uv sync
-uv run coverage run -m pytest
-uv run coverage report
+```bash
+pip install direct-connect
 ```
 
-### Linting & Static Analysis
-Run formatting, style checks, and type analysis:
-```commandline
-uv run ruff check .
-uv run ruff format --check .
-uv run mypy .
-```
+## Quickstart
 
-## Usage
+Register handlers with `@client.on(...)` and run the client with `run_forever()`. Keepalive pings and automatic reconnection on failure are handled natively.
 
-### NMDC (Neo-Modus Direct Connect)
+### NMDC Bot
 
-Create an NMDC client:
 ```python
+import asyncio
 from direct_connect import nmdc
 
-client = nmdc.NMDC(host="example.com", nick="my_bot", socket_timeout=2.0)
-```
+client = nmdc.NMDC(host="example.com", nick="my_bot")
 
-Register a handler for incoming chat messages. Handlers are coroutines that receive the client and an `NMDCEvent` (with `event_type`, `message`, and `user` attributes).
-```python
 @client.on("message")
 async def on_message(client: nmdc.NMDC, event: nmdc.NMDCEvent) -> None:
-    print(f"{event.user}: {event.message}")
+    if event.message == "!hello":
+        await client.send_chat(f"Hello, {event.user}!")
+
+async def main() -> None:
+    await client.run_forever()
+
+asyncio.run(main())
 ```
 
-You can register handlers for any specific NMDC command (e.g. `$HubName`, `$OpList`) by passing the command name. Multiple handlers per event type are supported.
+### ADC Bot
+
 ```python
-@client.on("$HubName")
-async def on_hub_name(client: nmdc.NMDC, event: nmdc.NMDCEvent) -> None:
-    print(f"Hub Name: {event.message}")
-```
-
-Send a chat message:
-```python
-await client.send_chat("test chat")
-```
-
-Run the client. `run_forever()` connects, sends pings, listens for events, and automatically reconnects on connection errors.
-```python
-await client.run_forever()
-```
-
-#### Configuration Options
-The `NMDC` client can be configured with the following properties before starting:
-- `description_comment` (default `"bot"`): Sent inside the `$MyINFO` payload.
-- `description_tag` (default `None`): Client description tag.
-- `description_connection` (default `""`): Connection speed description.
-- `description_email` (default `""`): Email sent inside `$MyINFO`.
-- `ping_interval` (default `20` seconds): Interval between keepalive pings.
-- `reconnect_delay` (default `5` seconds): Time to wait before reconnecting on failure.
-- `max_message_size` (default `65536` bytes): Maximum allowed message size before raising `MessageLimitExceededError`.
-
-
-### ADC (Advanced Direct Connect)
-
-Create an ADC client:
-```python
+import asyncio
 from direct_connect import adc
 
-client = adc.ADC(host="example.com", nick="my_bot", socket_timeout=2.0)
-```
+client = adc.ADC(host="example.com", nick="my_bot")
 
-Register a handler for incoming events. Handlers are coroutines that receive the client and an `ADCEvent` (with `prefix`, `cmd`, `sender_sid`, `args`, and `tags` attributes).
-
-You can register a handler for a specific prefix-and-command combination (e.g. `"BMSG"`):
-```python
 @client.on("BMSG")
-async def on_bmsg(client: adc.ADC, event: adc.ADCEvent) -> None:
-    # event.args contains the parsed arguments (excluding prefix and command)
-    # event.tags contains the key-value pairs of any tagged parameters
-    print(f"Broadcast message from {event.sender_sid}: {event.args}")
+async def on_broadcast(client: adc.ADC, event: adc.ADCEvent) -> None:
+    print(f"Message from {event.sender_sid}: {event.args}")
+
+async def main() -> None:
+    await client.run_forever()
+
+asyncio.run(main())
 ```
 
-Or you can register a handler for just the command name (e.g. `"MSG"`), which acts as a fallback if no prefix-specific handler is registered:
+## Scope
+
+This library is a pure protocol client. It manages socket connections, handshakes, keepalive pings, and message serialization/deserialization. Application concerns like routing, state tracking, and rate limiting belong in your bot framework.
+
+---
+
+## NMDC Reference
+
+### Client Initialization
+
 ```python
-@client.on("MSG")
-async def on_msg(client: adc.ADC, event: adc.ADCEvent) -> None:
-    print(f"Message event: {event.args}")
+client = nmdc.NMDC(
+    host="localhost",
+    nick="",
+    port=411,
+    socket_timeout=None,
+    socket_connect_timeout=None,
+    encoding="utf_8",
+)
 ```
 
-Send a chat message. Note that `send_chat` requires the client to have received its Session ID (`sid`) from the hub (which occurs automatically during the initial handshake). If called before `client.sid` is assigned, it will raise a `ValueError`.
+### Handlers
+
+Register handlers for any NMDC command or the custom `"message"` event for public chat:
+
 ```python
-await client.send_chat("test chat")
+@client.on("message")       # Public chat event
+@client.on("$HubName")      # Command-specific handler
 ```
 
-Run the client. `run_forever()` connects, sends keepalive pings, listens for events, and automatically reconnects on connection errors.
+Handlers receive `(client: NMDC, event: NMDCEvent)`.
+
+#### `NMDCEvent` Attributes
+*   `event_type`: The command name or `"message"`
+*   `message`: Unescaped message payload
+*   `user`: Sender's nickname (available only on `"message"` events)
+
+### Configuration
+
+Attributes can be set directly on the client instance before running:
+
 ```python
-await client.run_forever()
+client.ping_interval = 20          # Seconds between pings
+client.reconnect_delay = 5         # Reconnection backoff in seconds
+client.max_message_size = 65536    # Max incoming message size
+client.description_comment = "bot" # Sent inside $MyINFO
+client.description_tag = None      # Client description tag
+client.description_connection = "" # Connection speed tag
+client.description_email = ""      # Contact email
 ```
 
-#### Configuration Options
-The `ADC` client can be configured with the following properties before starting:
-- `client_info` (default `{}`): Dictionary of key-value pairs (e.g., `client.client_info["DE"] = "My Description"`) sent inside the `INF` message.
-- `description_tag` (default `None`): Application version or description tag (sent as `VE` inside the `INF` message).
-- `ping_interval` (default `30` seconds): Interval between keepalive pings.
-- `reconnect_delay` (default `5` seconds): Time to wait before reconnecting on failure.
-- `max_message_size` (default `65536` bytes): Maximum allowed message size before raising `MessageLimitExceededError`.
-- `features` (default `{"BASE", "TIGR"}`): Set of features advertised by the client during handshake.
+---
+
+## ADC Reference
+
+### Client Initialization
+
+```python
+client = adc.ADC(
+    host="localhost",
+    nick="",
+    port=1511,
+    socket_timeout=None,
+    socket_connect_timeout=None,
+    encoding="utf-8",
+)
+```
+
+### Handlers
+
+Register handlers for specific combinations of prefix and command (e.g., `BMSG`), or fallback to the command alone (e.g., `MSG`):
+
+```python
+@client.on("BMSG")  # Specific to broadcast message
+@client.on("MSG")   # Fallback for any other MSG command prefix
+```
+
+Handlers receive `(client: ADC, event: ADCEvent)`.
+
+#### `ADCEvent` Attributes
+*   `prefix`: One of `B`, `D`, `E`, `F`, `U`
+*   `cmd`: Three-letter command name (e.g., `MSG`, `INF`)
+*   `sender_sid`: Session ID of the sender (if applicable)
+*   `args`: Positional arguments list (unescaped)
+*   `tags`: Dictionary of key-value tagged parameters (e.g., `VE`, `ID`)
+
+### Configuration
+
+```python
+client.ping_interval = 30           # Seconds between pings
+client.reconnect_delay = 5          # Reconnection backoff in seconds
+client.max_message_size = 65536     # Max incoming message size
+client.client_info = {}             # Custom INF fields (e.g., client.client_info["DE"] = "Desc")
+client.description_tag = None       # VE field in INF message
+client.features = {"BASE", "TIGR"}  # Set of supported features
+```
+
+---
+
+## Development
+
+```bash
+uv sync
+uv run pytest
+```
+
+Formatting and static analysis:
+```bash
+uv run ruff check .
+uv run ruff format .
+uv run mypy .
+```
